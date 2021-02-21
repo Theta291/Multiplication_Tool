@@ -30,7 +30,7 @@ def vec_mul(coeff, vec): return [coeff * elem for elem in vec]
 
 
 class Button:
-    def __init__(self, left_top, ):
+    def __init__(self):
         pass
 
 
