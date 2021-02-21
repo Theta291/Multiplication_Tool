@@ -30,8 +30,28 @@ def vec_mul(coeff, vec): return [coeff * elem for elem in vec]
 
 
 class Button:
-    def __init__(self):
-        pass
+    def __init__(self, size, pos, text, color, action):
+        self.position = pos
+        self.action = action
+        self.Rect = pygame.Rect(pos, size)
+
+        self.Surface = pygame.Surface(size)
+        self.Surface.fill(color)
+        text_surface = GRAPH_MARKS.render(text, False, BLACK)
+        text_size = text_surface.get_size()
+        text_pos = vec_add(vec_mul(0.5, size), vec_mul(-0.5, text_size))
+        self.Surface.blit(text_surface, text_pos)
+
+    def point_in(self, point):
+        return self.Rect.collidepoint(point)
+
+    def __call__(self):
+        if self.point_in(mouse_pos):
+            if mouse_let_go:
+                return self.action()
+
+    def draw(self):
+        SCREEN.blit(self.Surface, self.position)
 
 
 def frange(start, stop, step):
@@ -49,11 +69,6 @@ def complex_to_coords(complex):
     return [complex.real, complex.imag]
 
 
-def draw_lines(lines):
-    for line in lines:
-        pygame.draw.line(SCREEN, *line)
-
-
 class Grid:
     grid_factor = 5
     sub_grid_factor = 4
@@ -66,9 +81,17 @@ class Grid:
         self._Surface.set_alpha(alpha)
 
     @property
+    def alpha(self):
+        return self._Surface.get_alpha()
+
+    @alpha.setter
+    def alpha(self, value):
+        self._Surface.set_alpha(value)
+
+    @property
     def Surface(self):
         self._Surface.fill(WHITE)
-        self.draw()
+        self._draw()
         return self._Surface
 
     def to_pixel_pos(self, coordinates):
@@ -138,13 +161,16 @@ class Grid:
             text_surface = GRAPH_MARKS.render(text, False, BLACK)
             self._Surface.blit(text_surface, self.to_pixel_pos(coord))
 
-    def draw(self):
+    def _draw(self):
         screen_coords = [self.to_coordinate(pos) for pos in SCREEN_POS]
         x_s, y_s = zip(*screen_coords)
         bot_left = (min(x_s), min(y_s))
         top_right = (max(x_s), max(y_s))
 
         self._draw_grid(bot_left, top_right)
+
+    def draw(self):
+        SCREEN.blit(self.Surface, (0, 0))
 
 
 GLOBAL_GRID = Grid()
@@ -157,10 +183,10 @@ OVERLAY_GRID_ALPHA = 128
 class Dot:
     dots = []
 
-    def __init__(self, complex):
+    def __init__(self, complex, color=BLUE):
         self.coords = [1, 0]
         self.radius = 5
-        self.color = BLUE
+        self.color = color
         self.complex = complex
         self.dots.append(self)
 
@@ -180,45 +206,90 @@ class Dot:
         return (self.coords[0] - coords[0]) ** 2 + (self.coords[1] - coords[1]) ** 2 < (self.radius / screen_dilation) ** 2
 
 
+result = Dot(0, GREEN)
+mouse_clicked = False
+mouse_held = False
+mouse_right_clicked = False
+mouse_let_go = False
+mouse_pos = (0, 0)
+mouse_scrolled_up = False
+mouse_scrolled_down = False
+mouse_coords = (0, 0)
+
+
+def update_mouse_vars():
+    global mouse_clicked
+    global mouse_held
+    global mouse_right_clicked
+    global mouse_let_go
+    global mouse_pos
+    global mouse_coords
+    global mouse_scrolled_up
+    global mouse_scrolled_down
+
+    mouse_clicked = False
+    mouse_right_clicked = False
+    mouse_scrolled_up = False
+    mouse_scrolled_down = False
+    mouse_let_go = False
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            return True
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 1:
+                mouse_held = True
+                mouse_clicked = True
+            elif event.button == 3:
+                mouse_right_clicked = True
+            elif event.button == 4:
+                mouse_scrolled_up = True
+            elif event.button == 5:
+                mouse_scrolled_down = True
+        elif event.type == pygame.MOUSEBUTTONUP:
+            if event.button == 1:
+                mouse_held = False
+                mouse_let_go = True
+    mouse_pos = pygame.mouse.get_pos()
+    mouse_coords = GLOBAL_GRID.to_coordinate(mouse_pos)
+    return False
+
+
+MENU_BUTTON_SIZE = (100, 100)
+MENU_BUTTON_POS = (100, 100)
+MENU_BUTTON = Button(MENU_BUTTON_SIZE, MENU_BUTTON_POS, "Menu", GRAY, lambda: True)
+
+
 def main_mul():
     global screen_dilation
     global coord_shift
+    global mouse_clicked
+    global mouse_held
+    global mouse_right_clicked
+    global mouse_let_go
+    global mouse_scrolled_down
+    global mouse_scrolled_up
+    global mouse_coords
+    global mouse_pos
+    global result
 
     current_factor = Dot(1)
-    previous_product = 1
-    product = Dot(1)
-    product.color = GREEN
+    previous_product = result.complex
     curr_grid = Grid(alpha=OVERLAY_GRID_ALPHA)
-
-    mouse_clicked = False
-    mouse_held = False
-    mouse_right_clicked = False
 
     dragging = []
 
-    running = True
-    while running:
-        mouse_clicked = False
-        mouse_right_clicked = False
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mouse_held = True
-                    mouse_clicked = True
-                elif event.button == 3:
-                    mouse_right_clicked = True
-                elif event.button == 4:
-                    screen_dilation *= DILATION_RATE
-                elif event.button == 5:
-                    screen_dilation /= DILATION_RATE
-            elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1:
-                    mouse_held = False
-        mouse_pos = pygame.mouse.get_pos()
-        mouse_coords = GLOBAL_GRID.to_coordinate(mouse_pos)
+    while True:
+        if update_mouse_vars():
+            break
 
+        if MENU_BUTTON():
+            return False
+
+        if mouse_scrolled_up:
+            screen_dilation *= DILATION_RATE
+        elif mouse_scrolled_down:
+            screen_dilation /= DILATION_RATE
         if mouse_clicked:
             dragging = [dot for dot in Dot.dots if mouse_coords in dot]
             if len(dragging) == 0:
@@ -235,65 +306,63 @@ def main_mul():
             if mouse_coords in current_factor:
                 previous_product *= current_factor.complex
                 current_factor.complex = 1
-            elif mouse_coords in product:
+            elif mouse_coords in result:
                 previous_product = 1
                 current_factor.complex = 1
             else:
-                if curr_grid.opacity:
-                    curr_grid.opacity = 0
+                if curr_grid.alpha:
+                    curr_grid.alpha = 0
                 else:
-                    curr_grid.opacity = OVERLAY_GRID_ALPHA
-        product.complex = previous_product * current_factor.complex
+                    curr_grid.alpha = OVERLAY_GRID_ALPHA
+        result.complex = previous_product * current_factor.complex
         curr_grid.mul_complex = current_factor.complex
 
         SCREEN.fill(WHITE)
-        SCREEN.blit(GLOBAL_GRID.Surface, (0, 0))
-        SCREEN.blit(curr_grid.Surface, (0, 0))
-        product.draw()
+        GLOBAL_GRID.draw()
+        curr_grid.draw()
+        result.draw()
         current_factor.draw()
-        pygame.display.flip()
-    return product
+        MENU_BUTTON.draw()
+        pygame.display.update()
+
+    mouse_clicked = False
+    mouse_held = False
+    mouse_right_clicked = False
+    mouse_let_go = False
+    mouse_scrolled_up = False
+    mouse_scrolled_down = False
+    return True
 
 
 def main_add():
     global screen_dilation
     global coord_shift
+    global mouse_clicked
+    global mouse_held
+    global mouse_right_clicked
+    global mouse_let_go
+    global mouse_scrolled_down
+    global mouse_scrolled_up
+    global mouse_coords
+    global result
 
     current_term = Dot(0)
-    previous_sum = 1
-    sum_ = Dot(0)
-    sum_.color = GREEN
+    previous_sum = result.complex
     curr_grid = Grid(alpha=OVERLAY_GRID_ALPHA)
-
-    mouse_clicked = False
-    mouse_held = False
-    mouse_right_clicked = False
 
     dragging = []
 
-    running = True
-    while running:
-        mouse_clicked = False
-        mouse_right_clicked = False
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:
-                    mouse_held = True
-                    mouse_clicked = True
-                elif event.button == 3:
-                    mouse_right_clicked = True
-                elif event.button == 4:
-                    screen_dilation *= DILATION_RATE
-                elif event.button == 5:
-                    screen_dilation /= DILATION_RATE
-            elif event.type == pygame.MOUSEBUTTONUP:
-                if event.button == 1:
-                    mouse_held = False
-        mouse_pos = pygame.mouse.get_pos()
-        mouse_coords = GLOBAL_GRID.to_coordinate(mouse_pos)
+    while True:
+        if update_mouse_vars():
+            break
 
+        if MENU_BUTTON():
+            return False
+
+        if mouse_scrolled_up:
+            screen_dilation *= DILATION_RATE
+        elif mouse_scrolled_down:
+            screen_dilation /= DILATION_RATE
         if mouse_clicked:
             dragging = [dot for dot in Dot.dots if mouse_coords in dot]
             if len(dragging) == 0:
@@ -310,29 +379,78 @@ def main_add():
             if mouse_coords in current_term:
                 previous_sum += current_term.complex
                 current_term.complex = 0
-            elif mouse_coords in sum_:
+            elif mouse_coords in result:
                 previous_sum = 0
                 current_term.complex = 0
             else:
-                if curr_grid.opacity:
-                    curr_grid.opacity = 0
+                if curr_grid.alpha:
+                    curr_grid.alpha = 0
                 else:
-                    curr_grid.opacity = OVERLAY_GRID_ALPHA
-        sum_.complex = previous_sum + current_term.complex
+                    curr_grid.alpha = OVERLAY_GRID_ALPHA
+        result.complex = previous_sum + current_term.complex
         curr_grid.add_complex = current_term.complex
 
         SCREEN.fill(WHITE)
-        SCREEN.blit(GLOBAL_GRID.Surface, (0, 0))
-        SCREEN.blit(curr_grid.Surface, (0, 0))
-        sum_.draw()
+        GLOBAL_GRID.draw()
+        curr_grid.draw()
+        result.draw()
         current_term.draw()
+        MENU_BUTTON.draw()
         pygame.display.update()
-    return sum_
+
+    mouse_clicked = False
+    mouse_held = False
+    mouse_right_clicked = False
+    mouse_let_go = False
+    mouse_scrolled_up = False
+    mouse_scrolled_down = False
+    return True
 
 
 def main():
-    pass
+    global screen_dilation
+    global coord_shift
+
+    BUTTON_SIZE = (100, 100)
+    ADD_BUTTON_POS = (100, 100)
+    MUL_BUTTON_POS = (100, 300)
+    add_button = Button(BUTTON_SIZE, ADD_BUTTON_POS, "Add", GRAY, main_add)
+    mul_button = Button(BUTTON_SIZE, MUL_BUTTON_POS, "Multiply", GRAY, main_mul)
+
+    dragging = []
+    while True:
+        if update_mouse_vars():
+            break
+
+        if add_button():
+            return True
+        if mul_button():
+            return True
+
+        if mouse_scrolled_up:
+            screen_dilation *= DILATION_RATE
+        elif mouse_scrolled_down:
+            screen_dilation /= DILATION_RATE
+        if mouse_clicked:
+            dragging = [dot for dot in Dot.dots if mouse_coords in dot]
+            if len(dragging) == 0:
+                start_mouse = mouse_pos
+                start_coord = coord_shift.copy()
+        if mouse_held:
+            if len(dragging):
+                result.coords = list(mouse_coords)
+            else:
+                coord_diff = vec_mul((1 / screen_dilation), vec_add(start_mouse, vec_mul(-1, mouse_pos)))
+                coord_shift = vec_add(start_coord, coord_diff)
+        if mouse_right_clicked and mouse_coords in result:
+            result.complex = 0
+
+        SCREEN.fill(WHITE)
+        GLOBAL_GRID.draw()
+        result.draw()
+        add_button.draw()
+        mul_button.draw()
+        pygame.display.update()
 
 
-main_mul()
-pygame.quit()
+main()
